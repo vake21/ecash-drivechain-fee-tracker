@@ -1,6 +1,6 @@
 import type { Drivechain } from "./types";
 
-// The L1 mainchain coin symbol. eCash (Sztorc's 2026 Bitcoin hard fork) is a
+// The L1 mainchain coin symbol. eCash (a 2026 Bitcoin hard fork) is a
 // 1:1 BTC split, so the mainchain coin uses BTC-style units (1 coin = 1e8 sats).
 export const L1_SYMBOL = "BTC";
 export const SATS_PER_COIN = 100_000_000;

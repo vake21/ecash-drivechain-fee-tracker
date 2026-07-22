@@ -4,7 +4,7 @@ A dashboard that tracks how much each BIP 300/301 **drivechain** (sidechain) com
 the **eCash** mainchain via blind-merged-mining (BMM) — both the per-chain BMM activity
 and the fees fed to L1 miners.
 
-> **eCash** here means Paul Sztorc's 2026 Bitcoin hard fork (a 1:1 BTC split with ~7 L2s),
+> **eCash** here means a 2026 Bitcoin hard fork (a 1:1 BTC split with ~7 L2s),
 > **not** the 2021 Bitcoin Cash spinoff (XEC).
 
 ## How it works
