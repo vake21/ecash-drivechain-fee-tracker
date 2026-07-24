@@ -10,17 +10,26 @@
 //
 // FEES: a drivechain pays L1 via the fee on the BMM *request* tx that commits
 // that h*. We attribute a fee by finding a non-coinbase tx whose OP_RETURN embeds
-// a coinbase h*, then pricing the block's fee pool to that slot. ⚠ On this signet,
-// blocks are orchestrator-driven (GenerateBlocks) with NO fee-paying bid txs — so
-// fees read ~0 and the live headline metric is BMM commitment COUNT. The same
-// parser yields real fee numbers on a fee-active network (mainnet).
+// a coinbase h*, then charging ONLY that transaction's own fee to that slot — the
+// individual bid's fee, never the block's aggregate fee pool. Each BMM request tx
+// in a block is priced and attributed independently. ⚠ On this signet, blocks are
+// orchestrator-driven (GenerateBlocks) with NO fee-paying bid txs — so fees read ~0
+// and the live headline metric is BMM commitment COUNT. The same parser yields real
+// per-bid fee numbers on a fee-active network (mainnet).
+//
+// Requires getblock verbosity 3 (Bitcoin Core ≥ v25): it supplies each tx's `fee`
+// directly, plus `vin[].prevout.value` for the sum(inputs) − sum(outputs) fallback.
 
 /** The 4-byte BMM tag plus the OP_RETURN/push prefix, as a hex string. */
 export const BMM_PREFIX = "6a25d1617368"; // 6a=OP_RETURN 25=push37 d1617368=tag
 
-/** getblock verbosity-2 shapes we rely on. */
+/** getblock verbosity-3 shapes we rely on. */
 export interface RawTx {
   vout: { scriptPubKey: { hex: string }; value: number }[];
+  /** Per-tx fee in BTC (present for non-coinbase txs at verbosity 3). */
+  fee?: number;
+  /** Inputs; `prevout.value` (BTC) is present at verbosity 3. */
+  vin?: { prevout?: { value: number } }[];
 }
 export interface RawBlock {
   height: number;
@@ -45,9 +54,25 @@ export interface ParsedBlock {
   commitments: ParsedCommitment[];
 }
 
-/** L1 block subsidy in sats at a given height (50 coin, halving every 210k). */
-export function subsidySats(height: number): number {
-  return Math.floor(50 * 1e8) >> Math.floor(height / 210_000);
+/** BTC (float) → whole sats, rounded (avoids f.p. drift, e.g. 3.031e-05 → 3031). */
+function toSats(btc: number): number {
+  return Math.round(btc * 1e8);
+}
+
+/**
+ * Fee (sats) paid by a single transaction. Prefers the node-provided `fee`
+ * (getblock verbosity 3); falls back to sum(inputs) − sum(outputs) from the
+ * prevout values. Returns 0 if neither is available (never a block-wide proxy),
+ * so missing data understates rather than overstates.
+ */
+export function txFeeSats(tx: RawTx): number {
+  if (typeof tx.fee === "number") return toSats(tx.fee);
+  if (tx.vin && tx.vin.length > 0 && tx.vin.every((i) => i.prevout)) {
+    const inSats = tx.vin.reduce((s, i) => s + toSats(i.prevout!.value), 0);
+    const outSats = tx.vout.reduce((s, o) => s + toSats(o.value), 0);
+    return Math.max(inSats - outSats, 0);
+  }
+  return 0;
 }
 
 /**
@@ -67,21 +92,24 @@ export function parseBlock(b: RawBlock): ParsedBlock {
     }
   }
 
-  // Fee attribution: any non-coinbase tx whose OP_RETURN embeds a coinbase h*
-  // is a paid BMM bid; price it from the block's fee pool. (Yields 0 on
-  // orchestrator signets; correct on fee-active networks like mainnet.)
+  // Fee attribution: each non-coinbase tx whose OP_RETURN embeds a coinbase h* is a
+  // paid BMM bid. Charge ONLY that tx's own fee to the slot(s) it commits — every
+  // bid priced independently, never the block's aggregate fee pool. A single BMM
+  // request normally commits exactly one slot; if one somehow commits several, its
+  // fee is split evenly so the total attributed can never exceed the fee it paid.
   if (commitments.length > 0) {
-    const cbOut = Math.round(
-      coinbase.vout.reduce((s, o) => s + o.value, 0) * 1e8,
-    );
-    const blockFee = Math.max(cbOut - subsidySats(b.height), 0);
     for (const tx of b.tx.slice(1)) {
+      const matched = new Set<ParsedCommitment>();
       for (const v of tx.vout) {
         const hex = v.scriptPubKey.hex;
         if (!hex.startsWith("6a")) continue;
-        const match = commitments.find((c) => hex.includes(c.hstar));
-        if (match) match.feeSats += blockFee;
+        for (const c of commitments) {
+          if (hex.includes(c.hstar)) matched.add(c);
+        }
       }
+      if (matched.size === 0) continue;
+      const share = Math.floor(txFeeSats(tx) / matched.size);
+      for (const c of matched) c.feeSats += share;
     }
   }
 

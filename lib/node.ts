@@ -76,7 +76,7 @@ async function getLiveDashboardData(): Promise<DashboardData> {
     rpc<string>("getblockhash", [h]),
   );
   const blocks = await mapPool(hashes, CONCURRENCY, (hash) =>
-    rpc<RawBlock>("getblock", [hash, 2]),
+    rpc<RawBlock>("getblock", [hash, 3]), // verbosity 3 → per-tx fee + prevout values
   );
 
   // Per-slot, per-date tallies, built from the SHARED parser (lib/bmm.ts) so the

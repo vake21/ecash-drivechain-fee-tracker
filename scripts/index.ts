@@ -66,7 +66,7 @@ async function main() {
     rpc<string>("getblockhash", [h]),
   );
   const blocks = await mapPool(hashes, CONCURRENCY, (hash) =>
-    rpc<RawBlock>("getblock", [hash, 2]),
+    rpc<RawBlock>("getblock", [hash, 3]), // verbosity 3 → per-tx fee + prevout values
   );
 
   // Persist all blocks + commitments in one transaction so a crash never leaves
