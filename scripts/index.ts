@@ -8,8 +8,8 @@
 // safe (ON CONFLICT DO NOTHING), and it resumes from the highest stored height.
 
 import { rpc, mapPool } from "../lib/rpc";
-import { parseBlock, type RawBlock } from "../lib/bmm";
-import { ensureSchema, getDb, get, run, setMeta, tx } from "../lib/db";
+import { parseBlock, PARSER_VERSION, type RawBlock } from "../lib/bmm";
+import { ensureSchema, getDb, get, getMeta, run, setMeta, tx } from "../lib/db";
 
 // Load env (DCFT_DB, ECASH_RPC_*) before any connection is opened. Imports are
 // hoisted, but the DB opens lazily and rpc reads env / matching defaults.
@@ -42,6 +42,26 @@ async function main() {
     "SELECT MAX(height) AS max FROM blocks",
   );
   const lastIndexed = lastRow?.max ?? null;
+
+  // Parser-version guard. The DB is a derived cache; if it was written by a
+  // different fee-attribution parser, its stored fees may be stale. Refuse to
+  // append rather than silently mix versions — tell the user to rebuild (cheap:
+  // the whole cache re-derives from the node in well under a second). A fresh /
+  // empty DB has no data to be stale, so it just proceeds and gets stamped below.
+  const storedParser = getMeta("parser_version");
+  if (lastIndexed != null && storedParser !== String(PARSER_VERSION)) {
+    const dbPath = process.env.DCFT_DB ?? ".data/dcft.sqlite";
+    console.error(
+      `[index] parser version mismatch — this DB was built with parser ` +
+        `${storedParser ?? "(unversioned)"}, but the code is parser ${PARSER_VERSION}.\n` +
+        `        Fee attribution changed since it was written, so its cached fees may be\n` +
+        `        stale. The DB is a rebuildable cache — delete it and re-index:\n` +
+        `          rm ${dbPath} && npm run index`,
+    );
+    getDb().close();
+    process.exitCode = 1;
+    return;
+  }
 
   const from =
     lastIndexed != null
@@ -99,6 +119,7 @@ async function main() {
     }
     setMeta("network", network);
     setMeta("last_indexed_height", String(tip));
+    setMeta("parser_version", String(PARSER_VERSION));
   });
 
   const secs = ((Date.now() - startedAt) / 1000).toFixed(1);

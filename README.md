@@ -47,6 +47,20 @@ job to keep the store up to date:
 npm run index   # safe to run repeatedly; only fetches new blocks
 ```
 
+## Rebuilding the store
+
+The SQLite file is a **derived cache** — every value in it is re-computed from the node,
+so it is safe to delete at any time. To rebuild from scratch:
+
+```bash
+rm .data/dcft.sqlite && npm run index
+```
+
+The indexer stamps each database with the fee-attribution parser version it was written
+with. If you upgrade to a build whose fee math changed, the indexer detects the mismatch
+and **refuses to append to the old cache** (so stale fees can't silently linger) — it
+prints the `rm … && npm run index` command above. Rebuilding takes well under a second.
+
 ## Configuration
 
 All settings live in `.env.local` (see `.env.example` for the full list). Key ones:

@@ -23,6 +23,16 @@
 /** The 4-byte BMM tag plus the OP_RETURN/push prefix, as a hex string. */
 export const BMM_PREFIX = "6a25d1617368"; // 6a=OP_RETURN 25=push37 d1617368=tag
 
+/**
+ * Fee-attribution parser version. Stored in the DB's `meta` table so the indexer
+ * can detect a database written by a different version and refuse to append stale
+ * data to it (the DB is a derived cache — rebuild instead). BUMP THIS whenever the
+ * fee math below changes.
+ *   1 = original (whole-block-fee-pool attribution — incorrect)
+ *   2 = per-BMM-request-tx fee attribution (current)
+ */
+export const PARSER_VERSION = 2;
+
 /** getblock verbosity-3 shapes we rely on. */
 export interface RawTx {
   vout: { scriptPubKey: { hex: string }; value: number }[];
