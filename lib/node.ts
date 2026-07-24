@@ -4,6 +4,7 @@ import { DRIVECHAINS } from "./config";
 import { rpc, mapPool } from "./rpc";
 import { parseBlock, utcDate, type RawBlock } from "./bmm";
 import { getStoredDashboardData, EmptyStoreError } from "./store";
+import { finalizeStats } from "./aggregate";
 
 // Single entry point the UI calls for its data. All three sources return the same
 // DashboardData shape, so none of the UI changes when we swap between them.
@@ -102,7 +103,18 @@ async function getLiveDashboardData(): Promise<DashboardData> {
   }
 
   dates.sort();
-  const lastDate = dates[dates.length - 1];
+
+  // Rolling 24h by block time (not "last active date"), consistent with the
+  // stored path: fees on blocks newer than (latest block time − 24h), per slot.
+  const lastBlockTime = blocks.reduce((m, b) => Math.max(m, b.time), 0);
+  const cutoff = lastBlockTime - 86_400;
+  const last24BySlot = new Map<number, number>();
+  for (const raw of blocks) {
+    if (raw.time <= cutoff) continue;
+    for (const c of parseBlock(raw).commitments) {
+      last24BySlot.set(c.slot, (last24BySlot.get(c.slot) ?? 0) + c.feeSats);
+    }
+  }
 
   const stats: DrivechainStats[] = DRIVECHAINS.map((chainMeta) => {
     const byDate = tally.get(chainMeta.slot);
@@ -116,27 +128,18 @@ async function getLiveDashboardData(): Promise<DashboardData> {
     return {
       chain: chainMeta,
       totalFeesSats,
-      feesLast24hSats: byDate?.get(lastDate)?.fee ?? 0,
+      feesLast24hSats: last24BySlot.get(chainMeta.slot) ?? 0,
       bmmCommitments,
       bmmBidCount: 0,
       avgBidSats: 0,
-      shareOfTotal: 0,
+      shareOfTotal: 0, // filled by finalizeStats
       series,
     };
   });
 
-  const grandTotalBmmCommitments = stats.reduce(
-    (s, r) => s + r.bmmCommitments,
-    0,
-  );
-  const grandTotalFeesSats = stats.reduce((s, r) => s + r.totalFeesSats, 0);
-  for (const r of stats) {
-    r.shareOfTotal =
-      grandTotalBmmCommitments === 0
-        ? 0
-        : r.bmmCommitments / grandTotalBmmCommitments;
-  }
-  stats.sort((a, b) => b.bmmCommitments - a.bmmCommitments);
+  // Same metric-selection / share / ranking policy as the stored and mock paths.
+  const { metric, grandTotalFeesSats, grandTotalBmmCommitments } =
+    finalizeStats(stats);
 
   const network = (
     chain === "main" ? "mainnet" : chain === "test" ? "testnet" : "signet"
@@ -144,13 +147,14 @@ async function getLiveDashboardData(): Promise<DashboardData> {
 
   return {
     network,
-    metric: "bmm",
+    metric,
     tipHeight: tip,
     windowDays: dates.length,
     blocksScanned: blocks.length,
     stats,
     grandTotalFeesSats,
     grandTotalBmmCommitments,
+    lastBlockTime,
     note:
       grandTotalFeesSats === 0
         ? "BMM commitments are live; fee bids are ~0 on this orchestrator-driven signet."

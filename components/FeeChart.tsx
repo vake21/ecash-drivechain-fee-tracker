@@ -11,14 +11,37 @@ interface Props {
 // Stacked bar chart: one bar per day, each segment one drivechain's contribution
 // that day (BMM commitments or fees). Pure SVG — no chart dependency. SSR.
 export default function FeeChart({ stats, windowDays, metric }: Props) {
-  if (stats.length === 0) return null;
-
+  const dates = stats[0]?.series.map((p) => p.date) ?? [];
   const value = (p: FeePoint | undefined) =>
     metric === "bmm" ? (p?.bmmCount ?? 0) : (p?.feeSats ?? 0);
+  // Total of the values we'd actually plot (from the series), so the empty-state
+  // decision matches what the chart would draw.
+  const windowTotal = stats.reduce(
+    (sum, st) => sum + st.series.reduce((s, p) => s + value(p), 0),
+    0,
+  );
+
+  // Legitimate empty state: either no dates at all, or blocks were indexed but no
+  // BMM commitments fell in the (now zero-filled) window, so every value is 0.
+  // Render a message rather than computing chart geometry over zero dates (which
+  // would divide by zero and index past the end of `dates`) or drawing an all-zero
+  // chart that reads as broken. Do NOT fabricate mock activity here.
+  if (dates.length === 0 || windowTotal === 0) {
+    return (
+      <div className="w-full rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-10 text-center">
+        <p className="text-sm text-neutral-400">
+          No BMM commitments were found in the indexed window.
+        </p>
+        <p className="mt-1 text-xs text-neutral-500">
+          The indexer has blocks, but none carried drivechain commitments over
+          the last {windowDays} {windowDays === 1 ? "day" : "days"}.
+        </p>
+      </div>
+    );
+  }
+
   const axisLabel = (v: number) =>
     metric === "bmm" ? formatInt(Math.round(v)) : formatCoinsCompact(v);
-
-  const dates = stats[0].series.map((p) => p.date);
 
   // Daily total across all chains, for y-axis scaling.
   const dailyTotals = dates.map((_, i) =>

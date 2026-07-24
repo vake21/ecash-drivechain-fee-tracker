@@ -6,16 +6,20 @@
 // Each mainchain coinbase carries one OP_RETURN output PER merge-mined slot:
 //   script hex = 6a 25 d1617368 <slot:1 byte> <hStar:32 bytes>
 //   (6a=OP_RETURN, 25=push 37 bytes, d1617368=BMM tag, then slot + h*)
-// Counting these per slot gives real, live per-drivechain BMM activity.
+// The script is EXACTLY this — 6 + 1 + 32 = 39 bytes (78 hex chars). We parse it
+// strictly: a candidate that merely starts with the tag but is truncated or
+// malformed is ignored, never turned into a (slot=NaN, hstar="") commitment.
+// Counting valid commitments per slot gives real, live per-drivechain BMM activity.
 //
 // FEES: a drivechain pays L1 via the fee on the BMM *request* tx that commits
 // that h*. We attribute a fee by finding a non-coinbase tx whose OP_RETURN embeds
 // a coinbase h*, then charging ONLY that transaction's own fee to that slot — the
 // individual bid's fee, never the block's aggregate fee pool. Each BMM request tx
-// in a block is priced and attributed independently. ⚠ On this signet, blocks are
-// orchestrator-driven (GenerateBlocks) with NO fee-paying bid txs — so fees read ~0
-// and the live headline metric is BMM commitment COUNT. The same parser yields real
-// per-bid fee numbers on a fee-active network (mainnet).
+// in a block is priced and attributed independently; hstar is always a full
+// 32-byte hash here, so we never match an empty/partial string. ⚠ On this signet,
+// blocks are orchestrator-driven (GenerateBlocks) with NO fee-paying bid txs — so
+// fees read ~0 and the live headline metric is BMM commitment COUNT. The same
+// parser yields real per-bid fee numbers on a fee-active network (mainnet).
 //
 // Requires getblock verbosity 3 (Bitcoin Core ≥ v25): it supplies each tx's `fee`
 // directly, plus `vin[].prevout.value` for the sum(inputs) − sum(outputs) fallback.
@@ -24,14 +28,21 @@
 export const BMM_PREFIX = "6a25d1617368"; // 6a=OP_RETURN 25=push37 d1617368=tag
 
 /**
+ * Strict coinbase BMM-commitment script: the exact tag, then a 1-byte slot and a
+ * 32-byte h*, and NOTHING else. Anchored so truncated/oversized scripts fail.
+ */
+export const BMM_COMMITMENT_RE = /^6a25d1617368([0-9a-f]{2})([0-9a-f]{64})$/i;
+
+/**
  * Fee-attribution parser version. Stored in the DB's `meta` table so the indexer
  * can detect a database written by a different version and refuse to append stale
  * data to it (the DB is a derived cache — rebuild instead). BUMP THIS whenever the
- * fee math below changes.
+ * fee math or commitment interpretation below changes.
  *   1 = original (whole-block-fee-pool attribution — incorrect)
- *   2 = per-BMM-request-tx fee attribution (current)
+ *   2 = per-BMM-request-tx fee attribution
+ *   3 = strict commitment parsing + hardened fee attribution (current)
  */
-export const PARSER_VERSION = 2;
+export const PARSER_VERSION = 3;
 
 /** getblock verbosity-3 shapes we rely on. */
 export interface RawTx {
@@ -45,13 +56,16 @@ export interface RawBlock {
   height: number;
   hash: string;
   time: number;
+  /** Hash of the parent block — used to validate chain connectivity on index. */
+  previousblockhash?: string;
   tx: RawTx[];
 }
 
 /** One BMM commitment parsed out of a block's coinbase. */
 export interface ParsedCommitment {
+  /** BIP 300 sidechain slot (0-255). */
   slot: number;
-  /** 32-byte sidechain block hash commitment, hex. */
+  /** 32-byte sidechain block hash commitment, hex (lowercased, always 64 chars). */
   hstar: string;
   /** Fee (sats) attributed to this commitment's slot (≈0 on orchestrator signets). */
   feeSats: number;
@@ -64,55 +78,75 @@ export interface ParsedBlock {
   commitments: ParsedCommitment[];
 }
 
-/** BTC (float) → whole sats, rounded (avoids f.p. drift, e.g. 3.031e-05 → 3031). */
+/** BTC (float) → whole sats, rounded. Non-finite input yields 0, never NaN. */
 function toSats(btc: number): number {
+  if (!Number.isFinite(btc)) return 0;
   return Math.round(btc * 1e8);
 }
 
 /**
  * Fee (sats) paid by a single transaction. Prefers the node-provided `fee`
  * (getblock verbosity 3); falls back to sum(inputs) − sum(outputs) from the
- * prevout values. Returns 0 if neither is available (never a block-wide proxy),
- * so missing data understates rather than overstates.
+ * prevout values. Guaranteed to return a finite, non-negative integer — never
+ * NaN, Infinity, a negative number, or a block-wide proxy. Missing/garbage data
+ * yields 0, so it understates rather than overstates.
  */
 export function txFeeSats(tx: RawTx): number {
-  if (typeof tx.fee === "number") return toSats(tx.fee);
-  if (tx.vin && tx.vin.length > 0 && tx.vin.every((i) => i.prevout)) {
-    const inSats = tx.vin.reduce((s, i) => s + toSats(i.prevout!.value), 0);
-    const outSats = tx.vout.reduce((s, o) => s + toSats(o.value), 0);
-    return Math.max(inSats - outSats, 0);
+  if (typeof tx?.fee === "number" && Number.isFinite(tx.fee) && tx.fee >= 0) {
+    return toSats(tx.fee);
+  }
+  const vin = tx?.vin;
+  if (
+    Array.isArray(vin) &&
+    vin.length > 0 &&
+    vin.every((i) => i?.prevout && Number.isFinite(i.prevout.value))
+  ) {
+    const inSats = vin.reduce((s, i) => s + toSats(i.prevout!.value), 0);
+    const outSats = (tx.vout ?? []).reduce(
+      (s, o) => s + toSats(o?.value ?? 0),
+      0,
+    );
+    const fee = inSats - outSats;
+    return fee > 0 ? fee : 0;
   }
   return 0;
 }
 
 /**
  * Parse one block into its BMM commitments, with per-slot fee attribution.
- * Pure and deterministic: same block in → same result out.
+ * Pure and deterministic: same block in → same result out. Tolerant of malformed
+ * RPC shapes (missing coinbase, missing vout, truncated scripts): it produces
+ * zero commitments rather than throwing, so one bad block can't wedge the indexer.
  */
 export function parseBlock(b: RawBlock): ParsedBlock {
-  const coinbase = b.tx[0];
   const commitments: ParsedCommitment[] = [];
+  const coinbase = Array.isArray(b?.tx) ? b.tx[0] : undefined;
 
-  for (const v of coinbase.vout) {
-    const hex = v.scriptPubKey.hex;
-    if (hex.startsWith(BMM_PREFIX)) {
-      const slot = parseInt(hex.slice(12, 14), 16);
-      const hstar = hex.slice(14, 14 + 64);
+  if (coinbase && Array.isArray(coinbase.vout)) {
+    for (const v of coinbase.vout) {
+      const hex = v?.scriptPubKey?.hex;
+      if (typeof hex !== "string") continue;
+      const m = BMM_COMMITMENT_RE.exec(hex);
+      if (!m) continue;
+      const slot = parseInt(m[1], 16); // 2 hex chars → always 0..255
+      const hstar = m[2].toLowerCase(); // always exactly 64 hex chars
       commitments.push({ slot, hstar, feeSats: 0 });
     }
   }
 
   // Fee attribution: each non-coinbase tx whose OP_RETURN embeds a coinbase h* is a
   // paid BMM bid. Charge ONLY that tx's own fee to the slot(s) it commits — every
-  // bid priced independently, never the block's aggregate fee pool. A single BMM
+  // bid priced independently, never the block's aggregate fee pool. hstar is always
+  // a full 32-byte hash, so an empty/partial string can never match. A single BMM
   // request normally commits exactly one slot; if one somehow commits several, its
   // fee is split evenly so the total attributed can never exceed the fee it paid.
-  if (commitments.length > 0) {
+  if (commitments.length > 0 && Array.isArray(b.tx)) {
     for (const tx of b.tx.slice(1)) {
+      if (!tx || !Array.isArray(tx.vout)) continue;
       const matched = new Set<ParsedCommitment>();
       for (const v of tx.vout) {
-        const hex = v.scriptPubKey.hex;
-        if (!hex.startsWith("6a")) continue;
+        const hex = v?.scriptPubKey?.hex;
+        if (typeof hex !== "string" || !hex.startsWith("6a")) continue;
         for (const c of commitments) {
           if (hex.includes(c.hstar)) matched.add(c);
         }

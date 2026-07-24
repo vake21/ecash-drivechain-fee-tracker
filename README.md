@@ -61,6 +61,27 @@ with. If you upgrade to a build whose fee math changed, the indexer detects the 
 and **refuses to append to the old cache** (so stale fees can't silently linger) — it
 prints the `rm … && npm run index` command above. Rebuilding takes well under a second.
 
+## Fee attribution: current method and its limits
+
+Fees are attributed by matching a coinbase BMM commitment (`h*`) to a non-coinbase
+transaction whose `OP_RETURN` output **contains that 32-byte `h*`**, then charging
+only that transaction's own fee to the committed slot (`lib/bmm.ts`).
+
+This is a **heuristic**, not a full parse of a protocol-defined BMM-request format:
+
+- **Guaranteed safe bounds (tested):** `h*` is always a complete 32-byte value, so a
+  truncated/empty commitment can never match; each transaction's fee is attributed
+  once and split across any slots it commits, so **the total attributed from a
+  transaction never exceeds the fee it actually paid**.
+- **Known limitation:** it matches *any* `OP_RETURN` that embeds the 32-byte
+  sequence, which is broader than parsing an authoritative BMM-request tag + field
+  layout. On the current orchestrator-driven signet this is moot (no fee-paying
+  bids exist), but **before presenting this as mainnet-grade fee accounting**, the
+  canonical BIP 301 BMM-request transaction format should be verified against
+  drivechain/BitWindow protocol sources and parsed explicitly.
+- If that verification changes how historical data is interpreted, bump
+  `PARSER_VERSION` (`lib/bmm.ts`) and rebuild the derived cache (see above).
+
 ## Configuration
 
 All settings live in `.env.local` (see `.env.example` for the full list). Key ones:

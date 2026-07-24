@@ -1,13 +1,22 @@
 // DB-backed dashboard reader. Aggregates persisted BMM commitments into the same
 // DashboardData shape the mock and live-node paths return — so the UI is unchanged.
 //
-// This path NEVER talks to the node: the website reads history straight from
-// Postgres, so it renders even while BitWindow is off. The indexer (scripts/index.ts)
-// is what keeps the store fresh.
+// This path NEVER talks to the node: the website reads history straight from the
+// SQLite store, so it renders even while the node is off. The indexer
+// (scripts/index.ts) is what keeps the store fresh.
+//
+// The reporting window is a run of CONTIGUOUS UTC calendar days ending at the
+// latest indexed block's date — NOT "the N most recent days that happened to have
+// activity". Zero-activity days appear as zeros, and the window can never reach
+// further than WINDOW_DAYS calendar days into the past. "Fees last 24h" is a real
+// rolling boundary (blocks newer than latest-block-time − 24h), and lastBlockTime
+// is exposed so the UI can show freshness rather than presenting stale data as new.
 
 import type { DashboardData, DrivechainStats, FeePoint } from "./types";
 import { DRIVECHAINS, WINDOW_DAYS } from "./config";
 import { get, all, getMeta } from "./db";
+import { finalizeStats } from "./aggregate";
+import { utcDate } from "./bmm";
 
 /** Thrown when the store has no data yet (caller can fall back to mock). */
 export class EmptyStoreError extends Error {}
@@ -19,39 +28,87 @@ interface AggRow {
   fee: number;
 }
 
+const DAY_SECONDS = 86_400;
+
+/** ISO date `iso` shifted by `delta` whole UTC days. */
+function addDaysUTC(iso: string, delta: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d) + delta * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+}
+/** Whole UTC days from ISO date `a` to ISO date `b` (b − a). */
+function daysBetween(a: string, b: string): number {
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  return Math.round(
+    (Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000,
+  );
+}
+/** `n` contiguous UTC dates ending at `refDate` (chronological). */
+function lastNDatesEnding(refDate: string, n: number): string[] {
+  const out: string[] = [];
+  for (let i = n - 1; i >= 0; i--) out.push(addDaysUTC(refDate, -i));
+  return out;
+}
+
 export async function getStoredDashboardData(): Promise<DashboardData> {
-  const tipRow = get<{ tip: number | null; scanned: number }>(
-    "SELECT MAX(height) AS tip, COUNT(*) AS scanned FROM blocks",
+  const tipRow = get<{
+    tip: number | null;
+    scanned: number;
+    firstTime: number | null;
+    lastTime: number | null;
+  }>(
+    "SELECT MAX(height) AS tip, COUNT(*) AS scanned, MIN(time) AS firstTime, MAX(time) AS lastTime FROM blocks",
   );
   const tipHeight = tipRow?.tip;
   const blocksScanned = tipRow?.scanned ?? 0;
-  if (tipHeight == null || blocksScanned === 0) {
+  if (tipHeight == null || blocksScanned === 0 || tipRow?.lastTime == null) {
     throw new EmptyStoreError("no blocks indexed yet");
   }
-
-  const rows = all<AggRow>(`
-    SELECT c.slot AS slot,
-           strftime('%Y-%m-%d', b.time, 'unixepoch') AS date,
-           COUNT(*) AS bmm,
-           COALESCE(SUM(c.fee_sats), 0) AS fee
-    FROM commitments c
-    JOIN blocks b ON b.height = c.height
-    GROUP BY c.slot, date
-  `);
 
   const network = (getMeta("network") ??
     "signet") as DashboardData["network"];
 
-  // Most-recent WINDOW_DAYS distinct dates, chronological.
-  const allDates = Array.from(new Set(rows.map((r) => r.date))).sort();
-  const dates = allDates.slice(-WINDOW_DAYS);
-  const dateSet = new Set(dates);
-  const lastDate = dates[dates.length - 1];
+  // Reference point for the whole window is the latest indexed block time.
+  const lastBlockTime = tipRow.lastTime;
+  const refDate = utcDate(lastBlockTime);
+  const firstDate = utcDate(tipRow.firstTime!);
+  // Contiguous calendar window: at most WINDOW_DAYS, and never longer than the
+  // span actually covered (so a 3-day signet doesn't render 27 empty days).
+  const spanDays = daysBetween(firstDate, refDate) + 1;
+  const windowDays = Math.max(1, Math.min(WINDOW_DAYS, spanDays));
+  const dates = lastNDatesEnding(refDate, windowDays);
+  const windowStart = dates[0];
 
-  // slot -> date -> {bmm, fee}
+  // Per slot/day aggregates within the window.
+  const rows = all<AggRow>(
+    `SELECT c.slot AS slot,
+            strftime('%Y-%m-%d', b.time, 'unixepoch') AS date,
+            COUNT(*) AS bmm,
+            COALESCE(SUM(c.fee_sats), 0) AS fee
+     FROM commitments c
+     JOIN blocks b ON b.height = c.height
+     WHERE strftime('%Y-%m-%d', b.time, 'unixepoch') >= ?
+     GROUP BY c.slot, date`,
+    windowStart,
+  );
+
+  // Rolling 24h: fees on blocks newer than (latest block time − 24h), per slot.
+  const cutoff = lastBlockTime - DAY_SECONDS;
+  const last24Rows = all<{ slot: number; fee: number }>(
+    `SELECT c.slot AS slot, COALESCE(SUM(c.fee_sats), 0) AS fee
+     FROM commitments c
+     JOIN blocks b ON b.height = c.height
+     WHERE b.time > ?
+     GROUP BY c.slot`,
+    cutoff,
+  );
+  const last24BySlot = new Map(last24Rows.map((r) => [r.slot, r.fee]));
+
+  // slot -> date -> {bmm, fee} (all dates in the window are contiguous).
   const tally = new Map<number, Map<string, { bmm: number; fee: number }>>();
   for (const r of rows) {
-    if (!dateSet.has(r.date)) continue;
     let byDate = tally.get(r.slot);
     if (!byDate) tally.set(r.slot, (byDate = new Map()));
     byDate.set(r.date, { bmm: r.bmm, fee: r.fee });
@@ -69,37 +126,29 @@ export async function getStoredDashboardData(): Promise<DashboardData> {
     return {
       chain,
       totalFeesSats,
-      feesLast24hSats: byDate?.get(lastDate)?.fee ?? 0,
+      feesLast24hSats: last24BySlot.get(chain.slot) ?? 0,
       bmmCommitments,
       bmmBidCount: 0,
       avgBidSats: 0,
-      shareOfTotal: 0, // filled below
+      shareOfTotal: 0, // filled by finalizeStats
       series,
     };
   });
 
-  const grandTotalBmmCommitments = stats.reduce(
-    (s, r) => s + r.bmmCommitments,
-    0,
-  );
-  const grandTotalFeesSats = stats.reduce((s, r) => s + r.totalFeesSats, 0);
-  for (const r of stats) {
-    r.shareOfTotal =
-      grandTotalBmmCommitments === 0
-        ? 0
-        : r.bmmCommitments / grandTotalBmmCommitments;
-  }
-  stats.sort((a, b) => b.bmmCommitments - a.bmmCommitments);
+  // Metric selection, per-chain share, and ranking — all from the same metric.
+  const { metric, grandTotalFeesSats, grandTotalBmmCommitments } =
+    finalizeStats(stats);
 
   return {
     network,
-    metric: grandTotalFeesSats > 0 ? "fees" : "bmm",
+    metric,
     tipHeight,
-    windowDays: dates.length,
+    windowDays,
     blocksScanned,
     stats,
     grandTotalFeesSats,
     grandTotalBmmCommitments,
+    lastBlockTime,
     note:
       grandTotalFeesSats === 0
         ? "BMM commitments are live from stored history; fee bids are ~0 on this orchestrator-driven signet."

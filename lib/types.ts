@@ -88,6 +88,11 @@ export interface DashboardData {
   grandTotalFeesSats: number;
   /** Sum of bmmCommitments across all drivechains. */
   grandTotalBmmCommitments: number;
+  /**
+   * Unix seconds of the most recent indexed block. Lets the UI show data
+   * freshness and flag a stale indexer instead of presenting old data as current.
+   */
+  lastBlockTime?: number;
   /** Optional human note (e.g. why fees are ~0 on this network). */
   note?: string;
 }

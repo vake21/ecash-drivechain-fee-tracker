@@ -1,4 +1,5 @@
 import { DRIVECHAINS, WINDOW_DAYS } from "./config";
+import { finalizeStats } from "./aggregate";
 import type {
   DashboardData,
   DrivechainStats,
@@ -81,29 +82,21 @@ function buildStats(): DrivechainStats[] {
       bmmCommitments,
       bmmBidCount,
       avgBidSats,
-      shareOfTotal: 0, // filled below
+      shareOfTotal: 0, // filled by finalizeStats
       series,
     };
   });
-
-  const grand = raw.reduce((s, r) => s + r.totalFeesSats, 0);
-  for (const r of raw) r.shareOfTotal = grand === 0 ? 0 : r.totalFeesSats / grand;
-
-  // Rank by total fees fed to L1, descending.
-  raw.sort((a, b) => b.totalFeesSats - a.totalFeesSats);
   return raw;
 }
 
 export function getMockDashboardData(): DashboardData {
   const stats = buildStats();
-  const grandTotalFeesSats = stats.reduce((s, r) => s + r.totalFeesSats, 0);
-  const grandTotalBmmCommitments = stats.reduce(
-    (s, r) => s + r.bmmCommitments,
-    0,
-  );
+  // Same metric-selection / share / ranking policy as the stored and live paths.
+  const { metric, grandTotalFeesSats, grandTotalBmmCommitments } =
+    finalizeStats(stats);
   return {
     network: "mock",
-    metric: "fees",
+    metric,
     tipHeight: 892_143,
     windowDays: WINDOW_DAYS,
     blocksScanned: WINDOW_DAYS * 144,

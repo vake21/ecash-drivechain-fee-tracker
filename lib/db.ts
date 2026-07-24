@@ -26,6 +26,17 @@ export function getDb(): DatabaseSync {
   return db;
 }
 
+/**
+ * Close the current connection and drop the cached handle. Mainly for tests,
+ * which open a fresh in-memory DB per case; also fine to call at process exit.
+ */
+export function closeDb(): void {
+  if (db) {
+    db.close();
+    db = null;
+  }
+}
+
 /** Create tables if absent. Safe to call repeatedly (idempotent DDL). */
 export function ensureSchema(d: DatabaseSync = getDb()): void {
   d.exec(`
@@ -38,9 +49,9 @@ export function ensureSchema(d: DatabaseSync = getDb()): void {
 
     CREATE TABLE IF NOT EXISTS commitments (
       height   INTEGER NOT NULL REFERENCES blocks(height) ON DELETE CASCADE,
-      slot     INTEGER NOT NULL,
-      hstar    TEXT NOT NULL,
-      fee_sats INTEGER NOT NULL DEFAULT 0,
+      slot     INTEGER NOT NULL CHECK (slot BETWEEN 0 AND 255),
+      hstar    TEXT NOT NULL CHECK (length(hstar) = 64),
+      fee_sats INTEGER NOT NULL DEFAULT 0 CHECK (fee_sats >= 0),
       PRIMARY KEY (height, slot, hstar)
     );
     CREATE INDEX IF NOT EXISTS commitments_slot_idx ON commitments (slot);

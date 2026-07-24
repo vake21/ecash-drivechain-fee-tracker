@@ -1,4 +1,5 @@
 import { getDashboardData } from "@/lib/node";
+import { computeFreshness } from "@/lib/freshness";
 import FeeChart from "@/components/FeeChart";
 import {
   formatCoins,
@@ -23,9 +24,14 @@ export default async function Home() {
     network,
     metric,
     note,
+    lastBlockTime,
   } = data;
   const isBmm = metric === "bmm";
   const activeCount = stats.filter((r) => r.bmmCommitments > 0).length;
+
+  // Data freshness (computed in the data layer, not during render): flag stale so
+  // an old indexer's data is never silently presented as current.
+  const { isStale, label: freshness } = computeFreshness(lastBlockTime);
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -57,6 +63,21 @@ export default async function Home() {
             <span className="rounded-full bg-neutral-800 px-2.5 py-1 text-neutral-400">
               tip #{formatInt(tipHeight)}
             </span>
+            {freshness ? (
+              <span
+                className={`rounded-full px-2.5 py-1 font-medium ring-1 ${
+                  isStale
+                    ? "bg-amber-500/15 text-amber-400 ring-amber-500/30"
+                    : "bg-neutral-800 text-neutral-400 ring-transparent"
+                }`}
+                title={`Latest indexed block time: ${new Date(
+                  (lastBlockTime ?? 0) * 1000,
+                ).toISOString()}`}
+              >
+                {isStale ? "stale · " : "updated "}
+                {freshness}
+              </span>
+            ) : null}
           </div>
         </header>
 
