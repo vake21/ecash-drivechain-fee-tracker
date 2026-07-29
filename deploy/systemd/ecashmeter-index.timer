@@ -1,0 +1,19 @@
+# /etc/systemd/system/ecashmeter-index.timer
+#
+# Enable THIS unit, not the .service:
+#     systemctl enable --now ecashmeter-index.timer
+[Unit]
+Description=Run the eCash Meter indexer every 5 minutes
+
+[Timer]
+# Give bitcoind time to come up and start serving RPC after a reboot.
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+# If the box was off when a run was due, run once shortly after boot rather than
+# waiting a full interval.
+Persistent=true
+Unit=ecashmeter-index.service
+
+[Install]
+WantedBy=timers.target

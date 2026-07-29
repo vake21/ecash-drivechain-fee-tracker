@@ -1,0 +1,34 @@
+# /etc/systemd/system/bitcoind.service
+[Unit]
+Description=Bitcoin Core (L2L-Signet) for eCash Meter
+Documentation=https://github.com/vake21/ecash-meter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bitcoin
+Group=bitcoin
+ExecStart=/usr/local/bin/bitcoind -conf=/etc/bitcoin/bitcoin.conf -datadir=/var/lib/bitcoind
+Restart=on-failure
+RestartSec=10
+# Core flushes the chainstate on shutdown; killing it early can corrupt the DB.
+TimeoutStopSec=300
+KillSignal=SIGTERM
+
+# Hardening. ProtectSystem=strict makes the filesystem read-only, so the datadir
+# has to be granted back explicitly.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/bitcoind
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

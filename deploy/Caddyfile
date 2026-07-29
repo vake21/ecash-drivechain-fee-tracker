@@ -1,0 +1,39 @@
+# /etc/caddy/Caddyfile
+#
+# Caddy obtains and renews the Let's Encrypt certificate automatically. Nothing
+# here references the server's IP address, so this file needs no edits when the
+# box is rebuilt or resized — only the DNS records point at the IP.
+
+# Send www to the apex so there is one canonical URL.
+www.example.com {
+	redir https://example.com{uri} permanent
+}
+
+example.com {
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:3000
+
+	header {
+		# The site is HTTPS-only. Remove `preload` unless you intend to submit
+		# the domain to the HSTS preload list, which is hard to undo.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		# The page is self-contained: no third-party scripts, fonts or images.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+		-Server
+	}
+
+	# The health probe should never be cached by anything in front of it.
+	@health path /api/health
+	header @health Cache-Control "no-store"
+
+	log {
+		output file /var/log/caddy/ecashmeter.log {
+			roll_size 20MiB
+			roll_keep 5
+		}
+	}
+}

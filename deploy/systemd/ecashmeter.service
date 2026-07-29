@@ -1,0 +1,41 @@
+# /etc/systemd/system/ecashmeter.service
+#
+# The web app. Reads the SQLite store ONLY — it never contacts bitcoind, which is
+# why it has no dependency on bitcoind.service and will keep serving the last
+# indexed data even if the node is down.
+[Unit]
+Description=eCash Meter web app (Next.js)
+Documentation=https://github.com/vake21/ecash-meter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ecashmeter
+Group=ecashmeter
+WorkingDirectory=/srv/ecashmeter
+# Deliberately does NOT include the RPC credentials — the site has no use for
+# them, so they stay out of this process's environment.
+EnvironmentFile=/etc/ecashmeter/site.env
+# Bind to loopback only: Caddy is the sole public entry point, so the app must
+# not be reachable on :3000 from outside even if the firewall is misconfigured.
+# (`next start` binds 0.0.0.0 by default.)
+ExecStart=/usr/bin/npm run start -- -H 127.0.0.1 -p 3000
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# SQLite in WAL mode requires *write* access to the -shm file even for readers,
+# so this path is read-write, not read-only.
+ReadWritePaths=/var/lib/ecashmeter
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
