@@ -1,6 +1,8 @@
+import Image from "next/image";
 import { getDashboardData } from "@/lib/node";
 import { computeFreshness } from "@/lib/freshness";
 import FeeChart from "@/components/FeeChart";
+import HeaderMotif from "@/components/HeaderMotif";
 import { feeFormatter, formatCoins, formatInt, formatPct } from "@/lib/format";
 
 // Data is read from the node at request time (behind a short TTL cache in the
@@ -39,15 +41,36 @@ export default async function Home() {
   const { isStale, label: freshness } = computeFreshness(lastBlockTime);
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100">
-      <div className="mx-auto max-w-5xl px-6 py-10">
+    <main className="relative min-h-screen bg-neutral-950 text-neutral-100">
+      {/* Page-level ambient wash, fixed so it stays put while the page scrolls.
+          Sits behind everything and never intercepts pointer events. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 -z-10"
+        style={{
+          background:
+            "radial-gradient(1100px 520px at 12% -8%, rgba(25,158,112,0.13), transparent 62%)," +
+            "radial-gradient(900px 460px at 88% -4%, rgba(201,133,0,0.07), transparent 58%)",
+        }}
+      />
+      <div className="mx-auto max-w-5xl px-6 py-12 sm:py-14">
         {/* header */}
-        <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <header className="relative isolate mb-10 flex flex-wrap items-end justify-between gap-5 pb-4">
+          <HeaderMotif />
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              eCash Meter
+            {/* The wordmark is part of the logo, so the image carries the h1's
+                accessible name rather than duplicating the text beside it. */}
+            <h1>
+              <Image
+                src="/logo-dark.png"
+                alt="eCash Meter"
+                width={1581}
+                height={357}
+                priority
+                className="h-12 w-auto sm:h-14"
+              />
             </h1>
-            <p className="mt-1 text-sm text-neutral-400">
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-neutral-400">
               {isBmm
                 ? "Blind-merged-mining activity each BIP 301 drivechain commits to L1."
                 : "Fees each BIP 301 drivechain feeds to L1 miners via blind-merged-mining bids."}
@@ -55,25 +78,31 @@ export default async function Home() {
           </div>
           <div className="flex items-center gap-2 text-xs">
             <span
-              className={`rounded-full px-2.5 py-1 font-medium ring-1 ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium ring-1 ${
                 network === "mock"
-                  ? "bg-amber-500/15 text-amber-400 ring-amber-500/30"
-                  : "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30"
+                  ? "bg-amber-500/15 text-amber-300 ring-amber-500/30"
+                  : "bg-brand/15 text-brand ring-brand/35"
               }`}
             >
+              <span
+                aria-hidden="true"
+                className={`h-1.5 w-1.5 rounded-full ${
+                  network === "mock" ? "bg-amber-400" : "bg-brand"
+                }`}
+              />
               {network === "mock"
                 ? "MOCK DATA"
                 : `LIVE · ${network.toUpperCase()}`}
             </span>
-            <span className="rounded-full bg-neutral-800 px-2.5 py-1 text-neutral-400">
+            <span className="rounded-full bg-white/[0.06] px-3 py-1.5 text-neutral-400 ring-1 ring-white/10">
               tip #{formatInt(tipHeight)}
             </span>
             {freshness ? (
               <span
-                className={`rounded-full px-2.5 py-1 font-medium ring-1 ${
+                className={`rounded-full px-3 py-1.5 font-medium ring-1 ${
                   isStale
-                    ? "bg-amber-500/15 text-amber-400 ring-amber-500/30"
-                    : "bg-neutral-800 text-neutral-400 ring-transparent"
+                    ? "bg-amber-500/15 text-amber-300 ring-amber-500/30"
+                    : "bg-white/[0.06] text-neutral-400 ring-white/10"
                 }`}
                 title={`Latest indexed block time: ${new Date(
                   (lastBlockTime ?? 0) * 1000,
@@ -93,7 +122,7 @@ export default async function Home() {
         ) : null}
 
         {/* summary cards */}
-        <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <section className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
           {isBmm ? (
             <>
               <StatCard
@@ -143,24 +172,24 @@ export default async function Home() {
         </section>
 
         {/* chart */}
-        <section className="mb-8 rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
-          <h2 className="mb-3 text-sm font-medium text-neutral-300">
+        <section className="panel mb-10 rounded-2xl p-6">
+          <h2 className="mb-5 text-base font-semibold tracking-tight text-neutral-100">
             {isBmm ? "BMM activity over time" : "Fees fed to L1 over time"}
           </h2>
           <FeeChart stats={stats} windowDays={windowDays} metric={metric} />
         </section>
 
         {/* ranked table */}
-        <section className="rounded-xl border border-neutral-800 bg-neutral-900/50">
-          <h2 className="px-5 pt-5 text-sm font-medium text-neutral-300">
+        <section className="panel rounded-2xl">
+          <h2 className="px-6 pb-1 pt-6 text-base font-semibold tracking-tight text-neutral-100">
             {isBmm
               ? "Drivechains by BMM activity"
               : "Drivechains by fees fed to L1"}
           </h2>
-          <div className="overflow-x-auto p-2">
+          <div className="overflow-x-auto px-3 pb-3 pt-2">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
+                <tr className="text-left text-[11px] uppercase tracking-[0.08em] text-neutral-500">
                   <th className="px-3 py-2 font-medium">Drivechain</th>
                   <th className="px-3 py-2 text-right font-medium">
                     BMM blocks
@@ -175,7 +204,7 @@ export default async function Home() {
                 {stats.map((r) => (
                   <tr
                     key={r.chain.slot}
-                    className="border-t border-neutral-800/70 hover:bg-neutral-800/30"
+                    className="border-t border-white/[0.06] transition-colors hover:bg-white/[0.035]"
                   >
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-3">
@@ -225,7 +254,7 @@ export default async function Home() {
           </div>
         </section>
 
-        <footer className="mt-8 text-center text-xs text-neutral-600">
+        <footer className="mt-10 text-center text-xs text-neutral-600">
           {network === "mock"
             ? "Mockup with placeholder data · numbers are illustrative until wired to a live eCash node."
             : `Live from ${network} · scanned ${formatInt(
@@ -247,12 +276,17 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
-      <div className="text-xs text-neutral-500">{label}</div>
-      <div className="mt-1 text-lg font-semibold tabular-nums text-neutral-100">
+    <div className="panel panel-hover rounded-2xl p-5">
+      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+        {label}
+      </div>
+      {/* Proportional figures, not tabular — equal-width digits read loose at
+          display sizes. `tabular-nums` stays on the table, where numbers align
+          vertically and need to. */}
+      <div className="mt-2.5 text-2xl font-semibold tracking-tight text-neutral-50 sm:text-3xl">
         {value}
       </div>
-      {sub ? <div className="mt-0.5 text-xs text-neutral-500">{sub}</div> : null}
+      {sub ? <div className="mt-1.5 text-xs text-neutral-500">{sub}</div> : null}
     </div>
   );
 }

@@ -3,6 +3,10 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Brand accents, taken from the logo. */
+  --brand: #199e70;
+  --brand-warm: #c98500;
 }
 
 @theme inline {
@@ -10,6 +14,15 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/* Brand colours are declared as literals rather than `inline` var() references.
+   Under `@theme inline` Tailwind emits the variable verbatim and silently drops
+   opacity modifiers, so `bg-brand/15` would paint a solid fill. With literals it
+   can compute the alpha. */
+@theme {
+  --color-brand: #199e70;
+  --color-brand-warm: #c98500;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,5 +35,42 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Use the Geist face loaded in app/layout.tsx. This previously hard-coded
+     Arial, which silently overrode the loaded font across the whole site. */
+  font-family:
+    var(--font-geist-sans),
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+
+/* Layered panel surface: a faint top-lit gradient plus a 1px inset highlight, so
+   cards read as raised rather than as flat outlined boxes. */
+.panel {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.055),
+    rgb(255 255 255 / 0.02)
+  );
+  border: 1px solid rgb(255 255 255 / 0.075);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.05),
+    0 1px 2px 0 rgb(0 0 0 / 0.4);
+}
+
+.panel-hover {
+  transition:
+    border-color 150ms ease,
+    background-image 150ms ease;
+}
+
+.panel-hover:hover {
+  border-color: rgb(255 255 255 / 0.13);
+  background-image: linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.08),
+    rgb(255 255 255 / 0.03)
+  );
 }

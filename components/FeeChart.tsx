@@ -8,6 +8,19 @@ interface Props {
   metric: "fees" | "bmm";
 }
 
+// Chart geometry (viewBox units).
+const W = 720;
+const H = 300;
+const padL = 8;
+const padR = 8;
+const padT = 8;
+const padB = 30;
+const plotW = W - padL - padR;
+const plotH = H - padT - padB;
+const BAR_GAP = 2; // between days
+const SEG_GAP = 2; // between stacked segments, so adjacent fills never touch
+const SEG_RADIUS = 2;
+
 // Stacked bar chart: one bar per day, each segment one drivechain's contribution
 // that day (BMM commitments or fees). Pure SVG — no chart dependency. SSR.
 export default function FeeChart({ stats, windowDays, metric }: Props) {
@@ -40,6 +53,12 @@ export default function FeeChart({ stats, windowDays, metric }: Props) {
     );
   }
 
+  // Stack in FIXED slot order, not the ranked order `stats` arrives in. Two
+  // reasons: the series palette was validated on the adjacent pairs that slot
+  // order produces, and a stack whose segment order changes with the ranking is
+  // unreadable across days. The ranked order still drives the table below.
+  const stacked = [...stats].sort((a, b) => a.chain.slot - b.chain.slot);
+
   // Daily total across all chains, for y-axis scaling.
   const dailyTotals = dates.map((_, i) =>
     stats.reduce((s, st) => s + value(st.series[i]), 0),
@@ -50,21 +69,15 @@ export default function FeeChart({ stats, windowDays, metric }: Props) {
   // share it. Scaling to maxDaily means a satoshi-scale window still draws
   // full-height bars; without this the ticks would all read "0 BTC" beside them.
   const formatFee = feeFormatter(maxDaily);
+  const formatValue = (v: number) =>
+    metric === "bmm"
+      ? `${formatInt(Math.round(v))} commitment${v === 1 ? "" : "s"}`
+      : formatFee(v);
   const axisLabel = (v: number) =>
     metric === "bmm" ? formatInt(Math.round(v)) : formatFee(v);
 
-  // Chart geometry (viewBox units).
-  const W = 720;
-  const H = 260;
-  const padL = 8;
-  const padR = 8;
-  const padT = 8;
-  const padB = 28;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
   const n = dates.length;
-  const gap = 2;
-  const barW = plotW / n - gap;
+  const barW = plotW / n - BAR_GAP;
 
   // Gridlines at 25/50/75/100% of max.
   const gridYs = [0.25, 0.5, 0.75, 1].map((f) => ({
@@ -78,9 +91,13 @@ export default function FeeChart({ stats, windowDays, metric }: Props) {
         viewBox={`0 0 ${W} ${H}`}
         className="w-full h-auto"
         role="img"
-        aria-label="Daily drivechain fees fed to L1"
+        aria-label={
+          metric === "bmm"
+            ? "Daily blind-merged-mining commitments per drivechain"
+            : "Daily drivechain fees fed to L1"
+        }
       >
-        {/* gridlines */}
+        {/* gridlines — recessive, behind the data */}
         {gridYs.map((g) => (
           <g key={g.f}>
             <line
@@ -88,7 +105,7 @@ export default function FeeChart({ stats, windowDays, metric }: Props) {
               x2={W - padR}
               y1={g.y}
               y2={g.y}
-              stroke="#1f2937"
+              stroke="#262626"
               strokeWidth={1}
             />
             <text
@@ -103,26 +120,31 @@ export default function FeeChart({ stats, windowDays, metric }: Props) {
           </g>
         ))}
 
-        {/* stacked bars */}
+        {/* stacked bars, in fixed slot order from the baseline up */}
         {dates.map((date, i) => {
-          const x = padL + i * (plotW / n) + gap / 2;
+          const x = padL + i * (plotW / n) + BAR_GAP / 2;
           let yCursor = padT + plotH;
           return (
             <g key={date}>
-              {stats.map((st) => {
+              {stacked.map((st) => {
                 const v = value(st.series[i]);
+                if (v <= 0) return null;
                 const h = (v / maxDaily) * plotH;
                 yCursor -= h;
+                // Hold the gap out of the drawn height so neighbouring fills are
+                // separated by surface, never by a colour boundary alone.
+                const drawH = Math.max(h - SEG_GAP, 0.75);
                 return (
                   <rect
                     key={st.chain.slot}
                     x={x}
                     y={yCursor}
                     width={barW}
-                    height={h}
+                    height={drawH}
+                    rx={Math.min(SEG_RADIUS, drawH / 2)}
                     fill={st.chain.color}
                   >
-                    <title>{`${st.chain.name} — ${date}`}</title>
+                    <title>{`${st.chain.name} — ${date} — ${formatValue(v)}`}</title>
                   </rect>
                 );
               })}
@@ -147,7 +169,27 @@ export default function FeeChart({ stats, windowDays, metric }: Props) {
           );
         })}
       </svg>
-      <p className="mt-1 text-xs text-neutral-500">
+
+      {/* Legend — eight series is past the point where direct labels fit, so
+          identity is carried here rather than by colour alone. Same order as the
+          stack, and the text wears text tokens rather than the series colour. */}
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+        {stacked.map((st) => (
+          <li
+            key={st.chain.slot}
+            className="flex items-center gap-1.5 text-xs text-neutral-400"
+          >
+            <span
+              aria-hidden="true"
+              className="h-2 w-2 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: st.chain.color }}
+            />
+            {st.chain.name}
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-2 text-xs text-neutral-500">
         {metric === "bmm"
           ? "Daily BMM commitments (blocks merge-mined), stacked by drivechain"
           : "Daily fees fed to L1 miners, stacked by drivechain"}{" "}
