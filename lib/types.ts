@@ -1,4 +1,4 @@
-// Core domain types for the drivechain fee tracker.
+// Core domain types for eCash Meter.
 //
 // The unit of account is satoshis of the L1 (mainchain) coin. eCash is a 1:1
 // Bitcoin hard fork, so the mainchain coin uses 8-decimal (sat) precision.

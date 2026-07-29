@@ -1,12 +1,7 @@
 import { getDashboardData } from "@/lib/node";
 import { computeFreshness } from "@/lib/freshness";
 import FeeChart from "@/components/FeeChart";
-import {
-  formatCoins,
-  formatCoinsCompact,
-  formatInt,
-  formatPct,
-} from "@/lib/format";
+import { feeFormatter, formatCoins, formatInt, formatPct } from "@/lib/format";
 
 // Data is read from the node at request time (behind a short TTL cache in the
 // data layer), so don't prerender this route at build.
@@ -29,6 +24,16 @@ export default async function Home() {
   const isBmm = metric === "bmm";
   const activeCount = stats.filter((r) => r.bmmCommitments > 0).length;
 
+  // Fee amounts pick their unit per group, so satoshi-scale totals show as sats
+  // rather than rounding away to "0.00 BTC". The two tiles key off the window
+  // total so they always agree; the table column keys off its own largest row.
+  const formatTileFee = feeFormatter(grandTotalFeesSats, (s) =>
+    formatCoins(s, 2),
+  );
+  const formatRowFee = feeFormatter(
+    Math.max(0, ...stats.map((r) => r.totalFeesSats)),
+  );
+
   // Data freshness (computed in the data layer, not during render): flag stale so
   // an old indexer's data is never silently presented as current.
   const { isStale, label: freshness } = computeFreshness(lastBlockTime);
@@ -40,7 +45,7 @@ export default async function Home() {
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              eCash Drivechain Fee Tracker
+              eCash Meter
             </h1>
             <p className="mt-1 text-sm text-neutral-400">
               {isBmm
@@ -114,13 +119,12 @@ export default async function Home() {
             <>
               <StatCard
                 label={`Total fees (${windowDays}d)`}
-                value={formatCoins(grandTotalFeesSats, 2)}
+                value={formatTileFee(grandTotalFeesSats)}
               />
               <StatCard
                 label="Fees last 24h"
-                value={formatCoins(
+                value={formatTileFee(
                   stats.reduce((s, r) => s + r.feesLast24hSats, 0),
-                  2,
                 )}
               />
               <StatCard
@@ -196,9 +200,7 @@ export default async function Home() {
                       {formatInt(r.bmmCommitments)}
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums text-neutral-300">
-                      {r.totalFeesSats > 0
-                        ? formatCoinsCompact(r.totalFeesSats)
-                        : "—"}
+                      {r.totalFeesSats > 0 ? formatRowFee(r.totalFeesSats) : "—"}
                     </td>
                     <td className="px-3 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">

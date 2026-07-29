@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "eCash Drivechain Fee Tracker",
+  title: "eCash Meter",
   description:
     "Track how much each BIP 300/301 drivechain pays L1 miners on eCash via blind-merged-mining bids.",
 };

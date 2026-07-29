@@ -1,5 +1,5 @@
 {
-  "name": "drivechain-fee-tracker",
+  "name": "ecash-meter",
   "version": "0.1.0",
   "private": true,
   "scripts": {

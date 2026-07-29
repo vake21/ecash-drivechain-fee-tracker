@@ -1,7 +1,7 @@
 // Fix #1 — canonical-chain reconciliation: reorgs, network identity, mid-download
 // races. Uses a scripted fake node (mocked JSON-RPC) and an in-memory SQLite DB.
 
-process.env.DCFT_DB = ":memory:"; // must be set before db.ts opens a connection
+process.env.ECASH_METER_DB = ":memory:"; // must be set before db.ts opens a connection
 
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
@@ -84,7 +84,7 @@ function dbHeights(): number[] {
 }
 
 beforeEach(() => {
-  process.env.DCFT_DB = ":memory:";
+  process.env.ECASH_METER_DB = ":memory:";
   closeDb(); // fresh in-memory DB per test
 });
 afterEach(() => closeDb());

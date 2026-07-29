@@ -176,7 +176,7 @@ export async function runIndexer(deps: IndexerDeps): Promise<IndexerResult> {
       message:
         `[index] refusing to index: this database was built from a different chain ` +
         `(stored genesis ${storedGenesis.slice(0, 16)}…, node genesis ${genesis.slice(0, 16)}…).\n` +
-        `        Databases from different networks must never be mixed. Point DCFT_DB at a\n` +
+        `        Databases from different networks must never be mixed. Point ECASH_METER_DB at a\n` +
         `        separate file for this network, or rebuild: delete the DB file and re-index.`,
     };
   }

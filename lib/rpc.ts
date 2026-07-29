@@ -88,7 +88,7 @@ export async function rpc<T = unknown>(
         "content-type": "text/plain;",
         authorization: authHeaderFor(cfg),
       },
-      body: JSON.stringify({ jsonrpc: "1.0", id: "dcft", method, params }),
+      body: JSON.stringify({ jsonrpc: "1.0", id: "ecash-meter", method, params }),
       // Never cache at the fetch layer; the data layer handles TTL caching.
       cache: "no-store",
       // A stalled node must not hang the indexer forever.

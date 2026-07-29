@@ -5,19 +5,19 @@
 // The whole site runs on one box (node + indexer + web server share this file),
 // so a local SQLite file is the simplest, fastest fit: one writer (the indexer),
 // many cheap reads (page renders). WAL mode lets reads proceed while the indexer
-// writes. To relocate the file, set DCFT_DB; otherwise it lives at ./.data/dcft.sqlite.
+// writes. To relocate the file, set ECASH_METER_DB; otherwise it lives at ./.data/ecash-meter.sqlite.
 
 import { DatabaseSync, type StatementResultingChanges } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-const DEFAULT_PATH = ".data/dcft.sqlite";
+const DEFAULT_PATH = ".data/ecash-meter.sqlite";
 
 let db: DatabaseSync | null = null;
 
 export function getDb(): DatabaseSync {
   if (!db) {
-    const path = process.env.DCFT_DB ?? DEFAULT_PATH;
+    const path = process.env.ECASH_METER_DB ?? DEFAULT_PATH;
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     db = new DatabaseSync(path);
     db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");

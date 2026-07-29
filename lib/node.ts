@@ -42,7 +42,7 @@ export async function getDashboardData(): Promise<DashboardData> {
           note: "No indexed history yet — run `npm run index`. Showing mock data.",
         };
       }
-      console.error("[dcft] store read failed, serving mock:", err);
+      console.error("[ecash-meter] store read failed, serving mock:", err);
       return {
         ...getMockDashboardData(),
         note: "History store unreachable — showing mock data.",
@@ -57,7 +57,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     cache = { at: Date.now(), data };
     return data;
   } catch (err) {
-    console.error("[dcft] live scan failed, serving mock:", err);
+    console.error("[ecash-meter] live scan failed, serving mock:", err);
     return {
       ...getMockDashboardData(),
       note: "Live node unreachable — showing mock data. Is BitWindow running?",

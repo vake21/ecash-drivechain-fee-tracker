@@ -1,7 +1,7 @@
 // Fix #3 (stored path) — the store's SQL aggregation must rank and share by the
 // selected metric. Reproduces the original bug end-to-end over an in-memory DB.
 
-process.env.DCFT_DB = ":memory:";
+process.env.ECASH_METER_DB = ":memory:";
 
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
@@ -32,7 +32,7 @@ function seedCommitment(height: number, slot: number, fee: number, time = TIME) 
 }
 
 beforeEach(() => {
-  process.env.DCFT_DB = ":memory:";
+  process.env.ECASH_METER_DB = ":memory:";
   closeDb();
   ensureSchema();
   setMeta("network", "signet");

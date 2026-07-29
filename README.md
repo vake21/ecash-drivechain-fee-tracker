@@ -1,4 +1,4 @@
-# eCash Drivechain Fee Tracker
+# eCash Meter
 
 A dashboard that tracks how much each BIP 300/301 **drivechain** (sidechain) commits to
 the **eCash** mainchain via blind-merged-mining (BMM) — both the per-chain BMM activity
@@ -10,7 +10,7 @@ and the fees fed to L1 miners.
 ## How it works
 
 ```
-node (BitWindow)  →  npm run index  →  SQLite (.data/dcft.sqlite)  →  Next.js site
+node (BitWindow)  →  npm run index  →  SQLite (.data/ecash-meter.sqlite)  →  Next.js site
    L1 mainchain       block indexer        history store               reads the DB
 ```
 
@@ -53,7 +53,7 @@ The SQLite file is a **derived cache** — every value in it is re-computed from
 so it is safe to delete at any time. To rebuild from scratch:
 
 ```bash
-rm .data/dcft.sqlite && npm run index
+rm .data/ecash-meter.sqlite && npm run index
 ```
 
 The indexer stamps each database with the fee-attribution parser version it was written
@@ -89,7 +89,7 @@ All settings live in `.env.local` (see `.env.example` for the full list). Key on
 | Variable | Purpose |
 |---|---|
 | `ECASH_SOURCE` | `db` (stored history), `live` (scan per request), or `mock` |
-| `DCFT_DB` | Path to the SQLite file (default `./.data/dcft.sqlite`) |
+| `ECASH_METER_DB` | Path to the SQLite file (default `./.data/ecash-meter.sqlite`) |
 | `ECASH_RPC_URL` / `ECASH_RPC_USER` / `ECASH_RPC_PASS` | Mainchain JSON-RPC connection |
 | `ECASH_SCAN_BLOCKS` | Blocks to backfill on the indexer's first run |
 

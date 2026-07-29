@@ -1,5 +1,5 @@
 import type { DrivechainStats, FeePoint } from "@/lib/types";
-import { formatCoinsCompact, formatInt } from "@/lib/format";
+import { feeFormatter, formatInt } from "@/lib/format";
 
 interface Props {
   stats: DrivechainStats[];
@@ -40,14 +40,18 @@ export default function FeeChart({ stats, windowDays, metric }: Props) {
     );
   }
 
-  const axisLabel = (v: number) =>
-    metric === "bmm" ? formatInt(Math.round(v)) : formatCoinsCompact(v);
-
   // Daily total across all chains, for y-axis scaling.
   const dailyTotals = dates.map((_, i) =>
     stats.reduce((s, st) => s + value(st.series[i]), 0),
   );
   const maxDaily = Math.max(...dailyTotals, 1);
+
+  // Pick the fee unit ONCE from the largest daily total so all four gridlines
+  // share it. Scaling to maxDaily means a satoshi-scale window still draws
+  // full-height bars; without this the ticks would all read "0 BTC" beside them.
+  const formatFee = feeFormatter(maxDaily);
+  const axisLabel = (v: number) =>
+    metric === "bmm" ? formatInt(Math.round(v)) : formatFee(v);
 
   // Chart geometry (viewBox units).
   const W = 720;

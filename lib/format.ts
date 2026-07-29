@@ -20,7 +20,30 @@ export function formatCoinsCompact(sats: number): string {
 
 /** Whole-number sats with thousands separators, e.g. "1,234,567 sats". */
 export function formatSats(sats: number): string {
-  return `${sats.toLocaleString("en-US")} sats`;
+  return `${Math.round(sats).toLocaleString("en-US")} sats`;
+}
+
+/**
+ * Coin display carries at most 2 fraction digits, so any amount below 0.01
+ * coins renders as "0.00" and the number is lost. Below this reference
+ * magnitude, show sats instead.
+ */
+const COIN_DISPLAY_MIN_SATS = SATS_PER_COIN / 100;
+
+/**
+ * Pick a fee formatter from the LARGEST value in a set, so every label in that
+ * set — axis ticks, a table column, a group of tiles — shares one unit. Mixing
+ * sats and coins within a set would read worse than rounding everything to
+ * zero, so the unit is decided once by the caller and applied to all members.
+ *
+ * `coinFormat` is the formatter used above the threshold; it defaults to the
+ * compact form for tight spaces (chart axis, table cells).
+ */
+export function feeFormatter(
+  maxSats: number,
+  coinFormat: (sats: number) => string = formatCoinsCompact,
+): (sats: number) => string {
+  return maxSats < COIN_DISPLAY_MIN_SATS ? formatSats : coinFormat;
 }
 
 /** Fraction (0-1) as a percentage, e.g. "23.4%". */
