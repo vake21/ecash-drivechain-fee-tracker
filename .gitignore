@@ -44,3 +44,6 @@ next-env.d.ts
 
 # local sqlite history store (built-in node:sqlite)
 .data/
+
+# Wallpaper source art (2.2MB). The optimized public/wallpaper.webp is what ships.
+/wallpaper.png
