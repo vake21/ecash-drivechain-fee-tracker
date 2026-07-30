@@ -45,6 +45,30 @@ during step 4. To run it under your own domain, change these and nothing else:
 3. **Nothing else for signet.** The RPC password, `rpcauth` hash and TLS
    certificate are all generated fresh on your box.
 
+### Branding assets are not included
+
+The repository ships **code only** — no logo, favicon or background image, so the
+artwork is not distributed under the code licence. Absent them the site renders a
+styled text wordmark and a plain gradient background; nothing errors. To brand a
+deployment, drop your own into place (they are gitignored, so `git pull` leaves
+them alone):
+
+| File | Purpose | Notes |
+|------|---------|-------|
+| `public/logo-dark.png` | header lockup, light-on-dark | any aspect ratio; rendered at 48–56px tall |
+| `public/wallpaper.webp` | full-page background | keep it dark — see below |
+| `app/icon.png` | favicon | square; Next picks it up automatically |
+
+Presence is checked once at startup in `lib/branding.ts`, so add the files
+**before** starting the service.
+
+Background artwork guidance, learned the hard way: the content column is a fixed
+1024px centred, so on a 1440px viewport ~71% of the image sits behind text. Keep
+mean luminance under ~10% and nothing above ~20% in that central band, or the
+`.panel` surfaces stop reading as raised. Export WebP/AVIF under ~400KB with 1–2%
+grain — dark gradients band badly in 8-bit, and a CSS background bypasses Next's
+image optimizer.
+
 Two things are *network*-specific rather than deployment-specific, and matter if
 you target something other than L2L-Signet:
 

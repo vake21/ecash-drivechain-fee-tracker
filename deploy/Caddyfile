@@ -1,5 +1,8 @@
 # /etc/caddy/Caddyfile
 #
+# Replace example.com with your own domain in BOTH site blocks below. That is the
+# only place the deployment's hostname appears; the application never hardcodes it.
+#
 # Caddy obtains and renews the Let's Encrypt certificate automatically. Nothing
 # here references the server's IP address, so this file needs no edits when the
 # box is rebuilt or resized — only the DNS records point at the IP.

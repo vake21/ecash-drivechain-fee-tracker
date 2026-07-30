@@ -47,3 +47,10 @@ next-env.d.ts
 
 # Wallpaper source art (2.2MB). The optimized public/wallpaper.webp is what ships.
 /wallpaper.png
+
+# Branding assets — intentionally NOT distributed with the code. Drop your own
+# into public/ (see lib/branding.ts); the site renders unbranded without them.
+/public/logo.png
+/public/logo-dark.png
+/public/wallpaper.webp
+/app/icon.png

@@ -1,5 +1,10 @@
-import Image from "next/image";
 import { getDashboardData } from "@/lib/node";
+import {
+  hasLogo,
+  hasWallpaper,
+  LOGO_FILE,
+  WALLPAPER_FILE,
+} from "@/lib/branding";
 import { computeFreshness } from "@/lib/freshness";
 import FeeChart from "@/components/FeeChart";
 import HeaderMotif from "@/components/HeaderMotif";
@@ -50,18 +55,26 @@ export default async function Home() {
 
           Layers paint first-listed on top. The brand gradients sit ABOVE the
           scrim so they keep tinting the page, while the scrim dims only the
-          wallpaper beneath it. The scrim is bottom-weighted because the artwork
-          measures ~4% mean luminance across its top third but ~12% (p99 62%)
-          across its bottom, which is exactly where the chart and table sit. */}
+          wallpaper beneath it. The scrim is bottom-weighted on the assumption
+          that artwork is darkest at the top, which is where the header sits and
+          where a bright band would do the most damage to legibility.
+
+          With no wallpaper present the gradients alone are the background, and
+          the scrim is dropped — it exists only to tame the image. */}
       <div
         aria-hidden="true"
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
-          background:
-            "radial-gradient(1100px 520px at 12% -8%, rgba(25,158,112,0.13), transparent 62%)," +
-            "radial-gradient(900px 460px at 88% -4%, rgba(201,133,0,0.07), transparent 58%)," +
-            "linear-gradient(to bottom, rgba(10,10,10,0.30), rgba(10,10,10,0.58) 45%, rgba(10,10,10,0.80))," +
-            "url('/wallpaper.webp') center center / cover no-repeat",
+          background: [
+            "radial-gradient(1100px 520px at 12% -8%, rgba(25,158,112,0.13), transparent 62%)",
+            "radial-gradient(900px 460px at 88% -4%, rgba(201,133,0,0.07), transparent 58%)",
+            ...(hasWallpaper
+              ? [
+                  "linear-gradient(to bottom, rgba(10,10,10,0.30), rgba(10,10,10,0.58) 45%, rgba(10,10,10,0.80))",
+                  `url('/${WALLPAPER_FILE}') center center / cover no-repeat`,
+                ]
+              : []),
+          ].join(","),
         }}
       />
       <div className="mx-auto max-w-5xl px-6 py-12 sm:py-14">
@@ -69,17 +82,28 @@ export default async function Home() {
         <header className="relative isolate mb-10 flex flex-wrap items-end justify-between gap-5 pb-4">
           <HeaderMotif />
           <div>
-            {/* The wordmark is part of the logo, so the image carries the h1's
-                accessible name rather than duplicating the text beside it. */}
+            {/* When a logo is supplied its wordmark IS the name, so the image
+                carries the h1's accessible name rather than repeating it as text
+                beside it. With no logo the h1 is the wordmark.
+
+                A plain <img> rather than next/image on purpose: the file is
+                deployer-supplied with unknown dimensions, and next/image needs
+                width/height up front for a non-imported source. Letting the
+                browser use the file's real intrinsic ratio is correct for any
+                asset, and it keeps sharp off the server's runtime path. */}
             <h1>
-              <Image
-                src="/logo-dark.png"
-                alt="eCash Meter"
-                width={1581}
-                height={357}
-                priority
-                className="h-12 w-auto sm:h-14"
-              />
+              {hasLogo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={`/${LOGO_FILE}`}
+                  alt="eCash Meter"
+                  className="h-12 w-auto sm:h-14"
+                />
+              ) : (
+                <span className="text-3xl font-semibold tracking-tight text-neutral-50 sm:text-4xl">
+                  eCash Meter
+                </span>
+              )}
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-neutral-400">
               {isBmm
