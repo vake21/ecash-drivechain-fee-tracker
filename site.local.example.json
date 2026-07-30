@@ -1,0 +1,11 @@
+{
+  "_comment": "Copy to site.local.json (gitignored) to add deployment-specific footer content. Both keys are optional; omit either and that part of the footer simply does not render.",
+  "learnLinks": [
+    { "label": "example.org", "href": "https://example.org/" }
+  ],
+  "credit": {
+    "label": "A Example project",
+    "href": "https://example.org",
+    "logo": "credit-logo.png"
+  }
+}

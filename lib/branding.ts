@@ -18,10 +18,6 @@ const publicFile = (name: string) => join(process.cwd(), "public", name);
 export const LOGO_FILE = "logo-dark.png";
 /** Full-bleed page background. Should be dark; see deploy/README.md for guidance. */
 export const WALLPAPER_FILE = "wallpaper.webp";
-/** Square badge beside the "A Merge Mined project" credit in the footer. */
-export const MERGE_MINED_LOGO_FILE = "merge-mined-logo.jpg";
 
 export const hasLogo = existsSync(publicFile(LOGO_FILE));
 export const hasWallpaper = existsSync(publicFile(WALLPAPER_FILE));
-// Absent, the footer credit still renders — just as a text link with no badge.
-export const hasMergeMinedLogo = existsSync(publicFile(MERGE_MINED_LOGO_FILE));

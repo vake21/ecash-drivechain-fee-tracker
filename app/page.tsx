@@ -1,12 +1,6 @@
 import { getDashboardData } from "@/lib/node";
-import {
-  hasLogo,
-  hasMergeMinedLogo,
-  hasWallpaper,
-  LOGO_FILE,
-  MERGE_MINED_LOGO_FILE,
-  WALLPAPER_FILE,
-} from "@/lib/branding";
+import { hasLogo, hasWallpaper, LOGO_FILE, WALLPAPER_FILE } from "@/lib/branding";
+import { credit, learnLinks } from "@/lib/site-links";
 import { computeFreshness } from "@/lib/freshness";
 import FeeChart from "@/components/FeeChart";
 import HeaderMotif from "@/components/HeaderMotif";
@@ -16,14 +10,6 @@ import { feeFormatter, formatCoins, formatInt, formatPct } from "@/lib/format";
 // data layer), so don't prerender this route at build.
 export const dynamic = "force-dynamic";
 
-// Further-reading links in the footer — the primary specs and reference site for
-// BIP 300/301. Kept in step with the "Learn" set on the Merge Mined site.
-const LEARN_LINKS = [
-  { label: "ecash.com", href: "https://ecash.com/" },
-  { label: "drivechain.info", href: "https://www.drivechain.info/" },
-  { label: "BIP 300", href: "https://en.bitcoin.it/wiki/BIP_0300" },
-  { label: "BIP 301", href: "https://en.bitcoin.it/wiki/BIP_0301" },
-];
 
 export default async function Home() {
   const data = await getDashboardData();
@@ -301,30 +287,33 @@ export default async function Home() {
         </section>
 
         <footer className="mt-12 border-t border-white/[0.07] pt-7">
-          {/* Further reading. Same set the Merge Mined site links under "Learn". */}
-          <nav
-            aria-label="Learn"
-            className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2"
-          >
-            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
-              Learn
-            </span>
-            {LEARN_LINKS.map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-neutral-400 transition-colors hover:text-brand"
-              >
-                {l.label}
-                <span aria-hidden="true" className="ml-1 text-brand">
-                  ↗
-                </span>
-              </a>
-            ))}
-          </nav>
-          <p className="mt-5 text-center text-xs text-neutral-600">
+          {/* Further reading — supplied per deployment via site.local.json, so a
+              fork ships with no external links at all. */}
+          {learnLinks.length > 0 ? (
+            <nav
+              aria-label="Learn"
+              className="mb-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2"
+            >
+              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+                Learn
+              </span>
+              {learnLinks.map((l) => (
+                <a
+                  key={l.href}
+                  href={l.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-neutral-400 transition-colors hover:text-brand"
+                >
+                  {l.label}
+                  <span aria-hidden="true" className="ml-1 text-brand">
+                    ↗
+                  </span>
+                </a>
+              ))}
+            </nav>
+          ) : null}
+          <p className="text-center text-xs text-neutral-600">
             {network === "mock"
               ? "Mockup with placeholder data · numbers are illustrative until wired to a live eCash node."
               : `Live from ${network} · scanned ${formatInt(
@@ -332,28 +321,29 @@ export default async function Home() {
                 )} blocks up to tip #${formatInt(tipHeight)}.`}
           </p>
 
-          {/* Sibling-project credit. The badge is optional branding like the rest
-              (see lib/branding.ts) — without it this stays a plain text link. */}
-          <a
-            href="https://example.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-8 flex items-center justify-center gap-3 text-sm text-neutral-400 transition-colors hover:text-neutral-200"
-          >
-            {hasMergeMinedLogo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={`/${MERGE_MINED_LOGO_FILE}`}
-                alt=""
-                aria-hidden="true"
-                className="h-9 w-9 rounded-[7px] ring-1 ring-white/10"
-              />
-            ) : null}
-            A Merge Mined project
-            <span aria-hidden="true" className="text-brand">
-              ↗
-            </span>
-          </a>
+          {/* Optional "project of X" credit, also from site.local.json. */}
+          {credit ? (
+            <a
+              href={credit.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-8 flex items-center justify-center gap-3 text-sm text-neutral-400 transition-colors hover:text-neutral-200"
+            >
+              {credit.hasLogo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={`/${credit.logo}`}
+                  alt=""
+                  aria-hidden="true"
+                  className="h-9 w-9 rounded-[7px] ring-1 ring-white/10"
+                />
+              ) : null}
+              {credit.label}
+              <span aria-hidden="true" className="text-brand">
+                ↗
+              </span>
+            </a>
+          ) : null}
         </footer>
       </div>
     </main>

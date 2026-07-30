@@ -62,6 +62,21 @@ them alone):
 Presence is checked once at startup in `lib/branding.ts`, so add the files
 **before** starting the service.
 
+Footer links and the "project of X" credit are deployment-specific too, and live
+in `site.local.json` (gitignored — copy `site.local.example.json`):
+
+```json
+{
+  "learnLinks": [{ "label": "example.org", "href": "https://example.org/" }],
+  "credit": { "label": "A Example project", "href": "https://example.org", "logo": "credit-logo.png" }
+}
+```
+
+Both keys are optional; omit either and that part of the footer does not render.
+`logo` is a bare filename inside `public/`. Only `http`/`https` hrefs are
+accepted, and a malformed file is logged and ignored rather than taking the site
+down. Read once at startup, so restart after editing.
+
 Background artwork guidance, learned the hard way: the content column is a fixed
 1024px centred, so on a 1440px viewport ~71% of the image sits behind text. Keep
 mean luminance under ~10% and nothing above ~20% in that central band, or the
