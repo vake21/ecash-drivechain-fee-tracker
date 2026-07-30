@@ -31,6 +31,34 @@ the web process must share a filesystem with it.
 The app never contacts the node, so the site keeps serving the last indexed data
 even while bitcoind is down or resyncing.
 
+## Forking this for your own deployment
+
+Nothing in this repository is specific to one machine — there are no IP addresses,
+credentials or keys anywhere in it, and every secret is generated on the server
+during step 4. To run it under your own domain, change these and nothing else:
+
+1. **Your domain** — `deploy/Caddyfile` (the two site blocks) and the
+   `example.com` references in this file. That is the only place the domain
+   appears; the app itself never hardcodes a hostname.
+2. **The clone URL** in step 6, and optionally the `Documentation=` lines in
+   `deploy/systemd/*.service`, to point at your fork.
+3. **Nothing else for signet.** The RPC password, `rpcauth` hash and TLS
+   certificate are all generated fresh on your box.
+
+Two things are *network*-specific rather than deployment-specific, and matter if
+you target something other than L2L-Signet:
+
+- `deploy/bitcoin.conf` — `signetchallenge` and `addnode` define which signet you
+  join. A different challenge is a different network, and the indexer will refuse
+  to mix them (it stamps the genesis hash into `meta`).
+- `lib/config.ts` — the 8-slot drivechain registry was read from L2L-Signet's
+  enforcer. Another network's slate may differ; long term this should be queried
+  from `ValidatorService.GetSidechains` rather than hardcoded.
+
+The service account names (`bitcoin`, `ecashmeter`) and paths
+(`/srv/ecashmeter`, `/var/lib/ecashmeter`) are arbitrary — rename them if you
+like, but change them consistently across `deploy/systemd/*` and the env files.
+
 ## Sizing
 
 **Hetzner CPX22** (2 vCPU / 4 GB / 80 GB, ~€19.49/mo), Ubuntu 26.04 — verified
