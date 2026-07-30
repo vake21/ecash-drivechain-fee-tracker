@@ -55,6 +55,7 @@ next-env.d.ts
 /public/wallpaper.webp
 /app/icon.png
 /public/merge-mined-logo.jpg
+/merge-mined-logo.jpg
 
 # Deployment-specific footer links / credit. Copy site.local.example.json.
 /site.local.json
