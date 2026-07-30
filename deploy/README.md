@@ -33,12 +33,23 @@ even while bitcoind is down or resyncing.
 
 ## Sizing
 
-**Hetzner CX22** (2 vCPU / 4 GB / 40 GB, ~€4/mo), Ubuntu 24.04. The L2L-Signet
+**Hetzner CPX22** (2 vCPU / 4 GB / 80 GB, ~€19.49/mo), Ubuntu 26.04 — verified
+on exactly that combination. Cost-optimized CX23 (~€5.49) is the better buy if it
+is in stock; it was sold out in every EU location at deploy time. Ubuntu 26.04 is
+fine despite being new: NodeSource serves `nodistro` and Caddy's repo serves
+`any-version`, so neither depends on the release codename. The L2L-Signet
 chain is ~26 MB — Next.js is the largest thing on the box, and the 4 GB is for
 the build, not the node. Price the EU regions; Hetzner's 2026 increases hit US
 locations hardest.
 
-Rescale to CPX31 before the August mainnet switch (see the last section).
+For the August mainnet switch, rescale within the same line (CPX32: 4 vCPU / 8 GB /
+160 GB) so it stays an in-place resize — crossing to a different CPU family does
+not. CPU/RAM-only rescales are reversible; growing the disk is one-way.
+
+**Verified end to end on 2026-07-30:** CPX22 / Ubuntu 26.04 / Nuremberg, Node
+24.18.1 (`node:sqlite` unflagged), Bitcoin Core v30.2.0, Caddy v2.11.4. Full
+backfill indexed blocks 0–7311 (42,752 commitments, 8.3 MB store) in 6.1s with a
+648 MB peak. Survives reboot with all four units `enabled`.
 
 ---
 
@@ -163,8 +174,10 @@ a mismatch here means the `signetchallenge` is wrong.
 ## 6. Deploy the app
 
 ```bash
-git clone https://github.com/vake21/ecash-meter.git /srv/ecashmeter
-chown -R ecashmeter:ecashmeter /srv/ecashmeter
+# Clone AS ecashmeter. Cloning as root then chowning leaves git refusing to
+# operate ("detected dubious ownership"), which breaks later `git pull`s.
+mkdir -p /srv/ecashmeter && chown ecashmeter:ecashmeter /srv/ecashmeter
+sudo -u ecashmeter git clone https://github.com/vake21/ecash-meter.git /srv/ecashmeter
 
 # Node must be new enough to ship node:sqlite unflagged.
 curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
@@ -196,11 +209,19 @@ chown root:ecashmeter /etc/ecashmeter/*.env && chmod 640 /etc/ecashmeter/*.env
 
 ## 7. First index, then the services
 
-Run the backfill by hand first so you can see it work:
+Install the units first, then run the backfill through the oneshot unit. Do NOT
+use `env $(grep … | xargs)` — the generated RPC password is random and can contain
+characters that word-splitting mangles, and the unit already reads the
+EnvironmentFile correctly:
 
 ```bash
-cd /srv/ecashmeter
-sudo -u ecashmeter env $(grep -v '^#' /etc/ecashmeter/indexer.env | xargs) npm run index
+cp deploy/systemd/ecashmeter.service       /etc/systemd/system/
+cp deploy/systemd/ecashmeter-index.service /etc/systemd/system/
+cp deploy/systemd/ecashmeter-index.timer   /etc/systemd/system/
+systemctl daemon-reload
+
+systemctl start ecashmeter-index.service
+journalctl -u ecashmeter-index -n 5 --no-pager -o cat
 ```
 
 Expect something like `inserted 7300 block(s), N commitment(s)`. If it reports
@@ -229,9 +250,16 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
 apt update && apt install -y caddy
 
 cp deploy/Caddyfile /etc/caddy/Caddyfile
-mkdir -p /var/log/caddy && chown caddy:caddy /var/log/caddy
+mkdir -p /var/log/caddy
 caddy validate --config /etc/caddy/Caddyfile
-systemctl reload caddy
+
+# MUST come AFTER validate. Running `caddy validate` as root instantiates the file
+# logger, creating /var/log/caddy/ecashmeter.log owned by root:root mode 600 — and
+# the service runs as `caddy`, so it then fails to start with "permission denied"
+# on that file. Chown the whole directory afterwards.
+chown -R caddy:caddy /var/log/caddy
+
+systemctl restart caddy
 ```
 
 Certificate issuance takes a few seconds once DNS resolves. Then:
@@ -282,7 +310,7 @@ changes — the indexer refuses to append across versions and tells you so):
 ```bash
 systemctl stop ecashmeter-index.timer
 rm /var/lib/ecashmeter/ecash-meter.sqlite*
-cd /srv/ecashmeter && sudo -u ecashmeter env $(grep -v '^#' /etc/ecashmeter/indexer.env | xargs) npm run index
+systemctl start ecashmeter-index.service   # reads the EnvironmentFile properly
 systemctl start ecashmeter-index.timer
 ```
 
